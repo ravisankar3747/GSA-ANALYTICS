@@ -10,10 +10,12 @@ import java.util.*;
 public final class PdfExport {
     private PdfExport() {}
     public static void write(OutputStream output, Reports.Table table, LocalDate asOn) throws IOException {
-        try(PdfDocument pdf=new PdfDocument()) {
+        PdfDocument pdf=new PdfDocument();
+        PdfDocument.Page page=null;
+        try {
             Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG); paint.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));
             float width=774f/table.headers.length; int pageNumber=1;
-            PdfDocument.Page page=start(pdf,table,asOn,pageNumber,paint,width); float y=116;
+            page=start(pdf,table,asOn,pageNumber,paint,width); float y=116;
             for(Reports.Row row:table.all()) {
                 paint.setTextSize(8); paint.setTypeface(Typeface.create("sans-serif",row==table.total?Typeface.BOLD:Typeface.NORMAL));
                 List<List<String>> lines=new ArrayList<>(); int count=1;
@@ -33,8 +35,8 @@ public final class PdfExport {
                     consumed+=take; y+=height;
                 }
             }
-            pdf.finishPage(page); pdf.writeTo(output);
-        }
+            pdf.finishPage(page); page=null; pdf.writeTo(output);
+        } finally { if(page!=null) pdf.finishPage(page); pdf.close(); }
     }
     private static PdfDocument.Page start(PdfDocument pdf,Reports.Table table,LocalDate date,int number,Paint paint,float width) {
         PdfDocument.Page page=pdf.startPage(new PdfDocument.PageInfo.Builder(842,595,number).create()); Canvas canvas=page.getCanvas();
@@ -59,3 +61,4 @@ public final class PdfExport {
         if(result.isEmpty()) result.add(""); return result;
     }
 }
+

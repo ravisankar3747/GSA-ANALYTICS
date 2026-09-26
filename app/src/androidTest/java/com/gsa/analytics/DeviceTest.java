@@ -33,12 +33,34 @@ public class DeviceTest {
                 final int position=report;
                 scenario.onActivity(a->((Spinner)find(a.getWindow().getDecorView(),"Report")).setSelection(position));
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync(); awaitRows(scenario);
+                scenario.onActivity(a->assertEquals(new int[]{9,4,4,2,2}[position],list(a.getWindow().getDecorView()).getCount()));
                 screenshot("report-"+report+".png");
             }
             scenario.recreate(); awaitRows(scenario);
             scenario.onActivity(a->assertEquals(4,((Spinner)find(a.getWindow().getDecorView(),"Report")).getSelectedItemPosition()));
             screenshot("restored-report.png");
         }
+    }
+    @Test public void importsTextPdfOnAndroid() throws Exception {
+        PDFBoxResourceLoader.init(context);
+        File file=new File(context.getCacheDir(),"Sale_to_30-06-2026.pdf");
+        android.graphics.pdf.PdfDocument pdf=new android.graphics.pdf.PdfDocument();
+        try {
+            android.graphics.pdf.PdfDocument.Page page=pdf.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(842,595,1).create());
+            android.graphics.Paint paint=new android.graphics.Paint(); paint.setTextSize(12);
+            page.getCanvas().drawText("General Alpha Ref No",20,30,paint);
+            page.getCanvas().drawText("SALE-FY/25-26/1 01/01/2026 15/01/2026 166 1000.00 600.00",20,50,paint);
+            pdf.finishPage(page);
+            try(OutputStream output=new FileOutputStream(file)) { pdf.writeTo(output); }
+        } finally { pdf.close(); }
+        ReportImport.Result result=ReportImport.read(file,file.getName());
+        assertEquals(1,result.invoices.size()); assertEquals("Alpha",result.invoices.get(0).customer); assertEquals(600,result.invoices.get(0).balance,0);
+        assertEquals(LocalDate.of(2026,6,30),result.reportDate); file.delete();
+    }
+    private ListView list(View view) {
+        if(view instanceof ListView) return (ListView)view;
+        if(view instanceof ViewGroup) for(int i=0;i<((ViewGroup)view).getChildCount();i++) { ListView found=list(((ViewGroup)view).getChildAt(i)); if(found!=null) return found; }
+        return null;
     }
     @Test public void pdfExportWrapsAndPaginates() throws Exception {
         PDFBoxResourceLoader.init(context); Reports.Options options=new Reports.Options(); options.asOn=LocalDate.of(2026,7,1);
@@ -73,3 +95,4 @@ public class DeviceTest {
         try(OutputStream out=new FileOutputStream(new File(context.getExternalFilesDir(null),name))) { bitmap.compress(Bitmap.CompressFormat.PNG,100,out); } finally { bitmap.recycle(); }
     }
 }
+
