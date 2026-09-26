@@ -119,7 +119,7 @@ public final class Reports {
             names.sort(Comparator.<String>comparingDouble(n->o.customerSort==2?-groups.get(n).size():-sum(groups.get(n),o.customerSort==0)).thenComparing(n->n.toLowerCase(Locale.ROOT)));
             for(String name:names) for(int s=0;s<8;s++) { final int which=s;
                 List<Invoice> values=groups.get(name).stream().filter(i->slab(age(i,o.asOn))==which).collect(Collectors.toList());
-                if(!values.isEmpty()) t.add(values,t.rows.size()+1,name,groups.get(name).size(),SLABS[s],values.size(),money(sum(values,false)),money(sum(values,true)),money(max(values)),"View bills");
+                if(!values.isEmpty()) t.add(values,t.rows.size()+1,name,groups.get(name).size(),SLABS[s],values.size(),money(sum(values,false)),money(sum(values,true)),money(max(values)),"\u25be View bills");
             }
             t.total("","TOTAL",visible.size(),"","",money(sum(visible,false)),money(sum(visible,true)),money(max(visible)),""); return t;
         }
@@ -148,7 +148,7 @@ public final class Reports {
         parties.sort(Comparator.<List<Invoice>>comparingDouble(b->-b.get(0).balance).thenComparing(b->b.get(0).customer.toLowerCase(Locale.ROOT)));
         double all=0,old=0,recent=0;
         for(List<Invoice> bills:parties) { double total=sum(bills,true), oldest=bills.get(0).balance; all+=total; old+=oldest; recent+=total-oldest;
-            t.add(bills,t.rows.size()+1,bills.get(0).customer,money(total),money(oldest),money(total-oldest),"View bills");
+            t.add(bills,t.rows.size()+1,bills.get(0).customer,money(total),money(oldest),money(total-oldest),"\u25be View bills");
         }
         t.total("","TOTAL",money(all),money(old),money(recent),""); return t;
     }
@@ -165,3 +165,4 @@ public final class Reports {
         return t;
     }
 }
+
