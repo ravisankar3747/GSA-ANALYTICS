@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.gsa.analytics'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.gsa.analytics'
+        minSdk 26
+        targetSdk 35
+        versionCode 70001
+        versionName '7.0.1'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    packaging { resources.excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*'] }
+    lint { abortOnError true }
+}
+
+dependencies {
+    implementation 'net.sourceforge.jexcelapi:jxl:2.6.12'
+    implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
