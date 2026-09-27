@@ -1,6 +1,6 @@
 # GSA-ANALYTICS for Android
 
-Native Android port of the supplied Windows V7 `sale_ageing_pro.py`. Android 8.0 (API 26) or newer is required. Import a Vyapar `.xls` or text-based sale-ageing PDF using the import icon. Select a report, adjust the ageing date, search, filter, sort by a column heading, or export the displayed table to PDF. Tap a customer or party row to see its invoices.
+Native Android port of the supplied Windows V7 `sale_ageing_pro.py`. Android 8.0 (API 26) or newer is required. Version 7.1 adds a mobile-first interface while retaining the V7 calculations. Use **Import report** to open a Vyapar `.xls` or text-based sale-ageing PDF. Select a report at the top, change **As of**, search, or open **Filters**. Compact report rows show customer and balance first; tap a row for complete fields and invoice details. **Export PDF** exports the current filtered and sorted report.
 
 ## Download the APK
 
@@ -18,7 +18,7 @@ This is an installable **debug-signed APK**, suitable for testing and direct ins
 | Old due billing | All qualifying old/new invoice pairs; configurable minimum balance and age gap; pair totals |
 | Old due vs new bills | Oldest outstanding invoice as old balance, all other outstanding invoices as new balance; configurable qualifying gap; party details |
 
-All five reports have sortable headings and landscape PDF export of the current filtered and sorted rows. Large tables scroll horizontally; rows are recycled vertically. Import, calculations and PDF export run off the UI thread. Report data and settings survive reopening the app. The delete icon clears the saved imported records.
+All five reports have a sort control and optional **Table** view with sortable column headings. Totals are above the list; the totals arrow opens every total field. Full tables scroll horizontally; list rows are recycled vertically. Import, calculations and PDF export run off the UI thread. Report data and settings survive reopening the app. **More options > Clear imported report** clears the saved imported records after confirmation.
 
 ## Exact rule notes
 
@@ -60,5 +60,7 @@ There is no account, password, API key, token, server, analytics SDK or network 
 - JExcelAPI 2.6.12 (LGPL): [XLS parser](https://jexcelapi.sourceforge.net/).
 - PDFBox-Android 2.0.27.0 (Apache-2.0): [PDF parser](https://github.com/TomRoush/PdfBox-Android).
 - Android framework `PdfDocument`: PDF output.
+- Material Components 1.12.0: Android controls and bottom sheets.
+- Lucide icons (ISC): vector assets; license in `licenses/lucide.txt`.
 
 The source project and dependencies remain subject to their respective owners' rights and licenses.

@@ -16,8 +16,13 @@ import java.io.*;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.*;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.*;
+import com.google.android.material.bottomsheet.*;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
     private static final int IMPORT=10, EXPORT=11, TEAL=0xff087f73, INK=0xff20352f;
     private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -32,17 +37,23 @@ public class MainActivity extends Activity {
     private final double[] thresholds={500,500};
     private final int[] gaps={60,60};
     private int customerSort=0;
-    private LinearLayout root, tableHost, filterBar;
-    private TextView source, status;
-    private Button dateButton;
+    private LinearLayout root, bottomBar, summary, searchRow, filterBar;
+    private TextView source, status, totalAmount, totalLabel, totalMeta, activeFilters;
+    private MaterialButton dateButton, importButton, exportButton, filtersButton;
     private EditText search;
-    private ImageButton importButton, exportButton, settingsButton;
+    private MobileUi ui;
+    private ListView resultList;
+    private BottomSheetDialog openSheet;
+    private boolean calculating;
+    private ImageButton clearSearch;
     private Spinner reports, slabPicker, sortPicker;
     private ProgressBar progress;
     private SharedPreferences prefs;
+    private static final String[] NAMES={"Balance by slab","Bills by slab","Bills count by slab","Old due billing","Old due vs new bills"};
+    private static final String[] TOTAL_LABELS={"Outstanding balance","Outstanding balance","Outstanding balance","Old balance across bill pairs","Party outstanding balance"};
 
     @Override public void onCreate(Bundle saved) {
-        super.onCreate(saved); PDFBoxResourceLoader.init(getApplicationContext()); prefs=getSharedPreferences("settings",MODE_PRIVATE);
+        super.onCreate(saved); WindowCompat.setDecorFitsSystemWindows(getWindow(),false); ui=new MobileUi(this); PDFBoxResourceLoader.init(getApplicationContext()); prefs=getSharedPreferences("settings",MODE_PRIVATE);
         LocalDate stored=Reports.date(prefs.getString("asOn","")); if(stored!=null) asOn=stored;
         report=prefs.getInt("report",0); customerSort=prefs.getInt("customerSort",0);
         for(int i=0;i<5;i++) { queries[i]=prefs.getString("q"+i,""); slabs[i]=prefs.getInt("s"+i,-1); }
@@ -67,30 +78,43 @@ public class MainActivity extends Activity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); s.setAdapter(adapter); s.setMinimumHeight(dp(48)); return s;
     }
     private void buildUi() {
-        root=vertical(); root.setFocusableInTouchMode(true); root.setBackgroundColor(Color.WHITE); root.setPadding(dp(12),0,dp(12),0);
-        root.setOnApplyWindowInsetsListener((v,insets)-> { v.setPadding(dp(12)+insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),dp(12)+insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom()); return insets; });
-        setContentView(root);
-        LinearLayout title=horizontal(); title.addView(text("GSA-ANALYTICS",20,true),new LinearLayout.LayoutParams(0,dp(56),1));
-        importButton=icon(android.R.drawable.ic_menu_upload,"Import report",this::chooseImport); title.addView(importButton);
-        exportButton=icon(android.R.drawable.ic_menu_save,"Export PDF",this::chooseExport); title.addView(exportButton); root.addView(title);
-        source=text(filename,12,false); source.setMaxLines(2); source.setEllipsize(TextUtils.TruncateAt.END); root.addView(source);
-        LinearLayout dateRow=horizontal(); dateRow.addView(text("Ageing as on",14,false)); dateButton=new Button(this); dateButton.setText(asOn.format(Reports.DATE)); dateButton.setOnClickListener(v->pickDate()); dateRow.addView(dateButton,new LinearLayout.LayoutParams(0,dp(48),1));
-        dateRow.addView(icon(android.R.drawable.ic_menu_delete,"Clear imported report",this::confirmClear)); root.addView(dateRow);
-        reports=spinner(Reports.TITLES); reports.setContentDescription("Report"); reports.setSelection(report); root.addView(reports);
-        LinearLayout searchRow=horizontal(); search=new EditText(this); search.setSingleLine(true); search.setHint("Search"); search.setContentDescription("Search report"); search.setTextSize(16); searchRow.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
-        settingsButton=icon(android.R.drawable.ic_menu_preferences,"Old balance and day thresholds",this::thresholdDialog); searchRow.addView(settingsButton); root.addView(searchRow);
-        filterBar=horizontal(); String[] choices=new String[9]; choices[0]="All slabs"; System.arraycopy(Reports.SLABS,0,choices,1,8);
-        slabPicker=spinner(choices); slabPicker.setContentDescription("Slab filter"); filterBar.addView(slabPicker,new LinearLayout.LayoutParams(0,dp(48),1));
-        sortPicker=spinner(new String[]{"Highest balance","Bill value","Number of bills"}); sortPicker.setContentDescription("Sort customers by"); filterBar.addView(sortPicker,new LinearLayout.LayoutParams(0,dp(48),1)); root.addView(filterBar);
-        status=text("",12,false); status.setPadding(0,dp(6),0,dp(6)); root.addView(status);
-        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setIndeterminate(true); root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
-        tableHost=vertical(); root.addView(tableHost,new LinearLayout.LayoutParams(-1,0,1));
-        reports.setOnItemSelectedListener(selected(position->{ if(position!=report) { report=position; sortColumn=-1; configureReport(); refresh(); } }));
-        slabPicker.setOnItemSelectedListener(selected(position->{ if(!restoring && slabs[report]!=position-1) { slabs[report]=position-1; sortColumn=-1; refresh(); } }));
-        sortPicker.setOnItemSelectedListener(selected(position->{ if(!restoring && customerSort!=position) { customerSort=position; sortColumn=-1; refresh(); } }));
+        root=vertical(); root.setFocusableInTouchMode(true); root.setBackgroundColor(Color.WHITE); setContentView(root);
+        LinearLayout toolbar=horizontal(); toolbar.setPadding(dp(18),dp(6),dp(6),dp(6));
+        LinearLayout brand=vertical(); brand.addView(ui.text("GSA Analytics",20,true)); source=ui.label(filename); source.setSingleLine(); source.setEllipsize(TextUtils.TruncateAt.MIDDLE); ui.gap(brand,4); brand.addView(source);
+        toolbar.addView(brand,new LinearLayout.LayoutParams(0,-2,1)); toolbar.addView(ui.icon(R.drawable.ic_ellipsis_vertical,"More options",this::showMore)); root.addView(toolbar);
+        reports=spinner(NAMES); reports.setContentDescription("Report"); reports.setSelection(report); reports.setPadding(dp(12),0,dp(12),0); root.addView(reports,new LinearLayout.LayoutParams(-1,dp(52)));
+        root.addView(ui.line()); progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setIndeterminate(true); root.addView(progress,new LinearLayout.LayoutParams(-1,dp(2)));
+        resultList=new ListView(this); resultList.setContentDescription("Report results"); resultList.setDivider(new android.graphics.drawable.ColorDrawable(MobileUi.LINE)); resultList.setDividerHeight(dp(1)); resultList.setClipToPadding(false);
+        LinearLayout header=vertical();
+        summary=vertical(); summary.setPadding(dp(18),dp(18),dp(18),dp(16)); summary.setBackgroundColor(MobileUi.PALE);
+        LinearLayout amountRow=horizontal(); LinearLayout totals=vertical(); totalLabel=ui.label(""); totals.addView(totalLabel); ui.gap(totals,8); totalAmount=ui.text("",30,true); ui.fitMoney(totalAmount,30); totals.addView(totalAmount,new LinearLayout.LayoutParams(-1,dp(40))); ui.gap(totals,6); totalMeta=ui.label(""); totals.addView(totalMeta);
+        amountRow.addView(totals,new LinearLayout.LayoutParams(0,-2,1)); amountRow.addView(ui.icon(R.drawable.ic_chevron_right,"Report totals",()->{ if(table!=null) showRow(table.total,table); })); summary.addView(amountRow); ui.gap(summary,14);
+        dateButton=ui.button("",R.drawable.ic_calendar_days,false,this::pickDate); dateButton.setContentDescription("Change ageing date"); summary.addView(dateButton,new LinearLayout.LayoutParams(-2,-2)); header.addView(summary);
+        searchRow=horizontal(); searchRow.setPadding(dp(16),dp(14),dp(16),dp(6));
+        LinearLayout searchBox=horizontal(); searchBox.setBackground(ui.background(MobileUi.PALE,8)); ImageView glass=ui.image(R.drawable.ic_search,MobileUi.MUTED); LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(20),dp(20)); gp.setMargins(dp(12),0,dp(8),0); searchBox.addView(glass,gp);
+        search=new EditText(this); search.setSingleLine(true); search.setHint("Search report"); search.setContentDescription("Search report"); search.setTextSize(14); search.setBackgroundColor(Color.TRANSPARENT); search.setPadding(0,dp(10),0,dp(10)); search.setMinHeight(dp(48)); search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        searchBox.addView(search,new LinearLayout.LayoutParams(0,-2,1)); clearSearch=ui.icon(R.drawable.ic_x,"Clear search",()->search.setText("")); searchBox.addView(clearSearch); clearSearch.setVisibility(View.GONE);
+        searchRow.addView(searchBox,new LinearLayout.LayoutParams(0,-2,1)); filtersButton=ui.button("Filters",R.drawable.ic_sliders_horizontal,false,this::showFilters); LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-2,-2); fp.setMargins(dp(8),0,0,0); searchRow.addView(filtersButton,fp); header.addView(searchRow);
+        activeFilters=ui.label(""); activeFilters.setPadding(dp(18),dp(4),dp(18),dp(8)); header.addView(activeFilters);
+        filterBar=horizontal(); filterBar.setPadding(dp(18),dp(2),dp(6),dp(8)); status=ui.label(""); filterBar.addView(status,new LinearLayout.LayoutParams(0,-2,1)); filterBar.addView(ui.button("Table",R.drawable.ic_table_2,false,this::showTable)); filterBar.addView(ui.icon(R.drawable.ic_arrow_down_up,"Sort report",this::showSort)); header.addView(filterBar);
+        resultList.addHeaderView(header,null,false); root.addView(resultList,new LinearLayout.LayoutParams(-1,0,1));
+        resultList.setOnItemClickListener((p,v,pos,id)->{ int i=pos-resultList.getHeaderViewsCount(); if(!calculating && table!=null && i>=0 && i<table.rows.size()) { hideKeyboard(); showRow(table.rows.get(i),table); } });
+        resultList.setOnScrollListener(new AbsListView.OnScrollListener() { public void onScrollStateChanged(AbsListView v,int state) { if(state==SCROLL_STATE_TOUCH_SCROLL) hideKeyboard(); } public void onScroll(AbsListView v,int first,int visible,int total) {} });
+        root.addView(ui.line()); bottomBar=horizontal(); bottomBar.setPadding(dp(16),dp(10),dp(16),dp(10));
+        importButton=ui.button("Import report",R.drawable.ic_file_up,true,this::chooseImport); exportButton=ui.button("Export PDF",R.drawable.ic_download,false,this::chooseExport); bottomBar.addView(importButton,new LinearLayout.LayoutParams(0,-2,1)); LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(0,-2,1); ep.setMargins(dp(10),0,0,0); bottomBar.addView(exportButton,ep); root.addView(bottomBar);
+        ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{ androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars()); androidx.core.graphics.Insets ime=insets.getInsets(WindowInsetsCompat.Type.ime()); v.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,ime.bottom)); bottomBar.setVisibility(insets.isVisible(WindowInsetsCompat.Type.ime())?View.GONE:View.VISIBLE); return insets; });
+        reports.setOnItemSelectedListener(selected(position->{ if(position!=report) { report=position; sortColumn=-1; configureReport(); refresh(); resultList.setSelection(0); } }));
+        search.setOnEditorActionListener((v,action,event)->{ hideKeyboard(); return true; });
         search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s,int start,int count,int after) {} public void onTextChanged(CharSequence s,int start,int before,int count) {
-            if(!restoring) { queries[report]=s.toString(); handler.removeCallbacks(searchRefresh); handler.postDelayed(searchRefresh,200); }
+            clearSearch.setVisibility(s.length()==0?View.GONE:View.VISIBLE); if(!restoring) { queries[report]=s.toString(); handler.removeCallbacks(searchRefresh); handler.postDelayed(searchRefresh,200); }
         } public void afterTextChanged(Editable e) {} });
+    }
+    private void hideKeyboard() {
+        root.requestFocus(); android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE); if(keyboard!=null) keyboard.hideSoftInputFromWindow(search.getWindowToken(),0);
+    }
+    private void showMore() {
+        PopupMenu menu=new PopupMenu(this,root.getChildAt(0)); menu.getMenu().add("Report file"); menu.getMenu().add("Clear imported report");
+        menu.setOnMenuItemClickListener(item->{ if(item.getTitle().equals("Report file")) new MaterialAlertDialogBuilder(this).setTitle("Report file").setMessage(filename+"\n"+invoices.size()+" invoice records").setPositiveButton("Close",null).show(); else confirmClear(); return true; }); menu.show();
     }
     private interface Selection { void accept(int value); }
     private AdapterView.OnItemSelectedListener selected(Selection listener) { return new AdapterView.OnItemSelectedListener() {
@@ -99,48 +123,97 @@ public class MainActivity extends Activity {
     }; }
     private final Runnable searchRefresh=()-> { sortColumn=-1; refresh(); };
     private void configureReport() {
-        restoring=true; search.setText(queries[report]); slabPicker.setSelection(slabs[report]+1); sortPicker.setSelection(customerSort);
-        filterBar.setVisibility(report==1 || report==2?View.VISIBLE:View.GONE); sortPicker.setVisibility(report==2?View.VISIBLE:View.GONE);
-        settingsButton.setVisibility(report>=3?View.VISIBLE:View.GONE); restoring=false;
-        root.requestFocus();
-        android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-        if(keyboard!=null) keyboard.hideSoftInputFromWindow(search.getWindowToken(),0);
+        restoring=true; search.setText(queries[report]); filtersButton.setVisibility(report==0?View.GONE:View.VISIBLE); restoring=false; hideKeyboard();
     }
-    private void pickDate() { new DatePickerDialog(this,(v,y,m,d)-> { asOn=LocalDate.of(y,m+1,d); dateButton.setText(asOn.format(Reports.DATE)); refresh(); },asOn.getYear(),asOn.getMonthValue()-1,asOn.getDayOfMonth()).show(); }
-    private void thresholdDialog() {
-        int index=report-3; LinearLayout fields=vertical(); fields.setPadding(dp(20),dp(8),dp(20),0);
-        fields.addView(text("Min old balance",14,false)); EditText amount=new EditText(this); amount.setInputType(8194); amount.setText(String.valueOf(thresholds[index])); fields.addView(amount);
-        fields.addView(text(report==3?"Old bill age at new bill (days)":"Minimum gap between bills (days)",14,false)); EditText days=new EditText(this); days.setInputType(2); days.setText(String.valueOf(gaps[index])); fields.addView(days);
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Report thresholds").setView(fields).setNegativeButton("Cancel",null).setPositiveButton("Apply",null).create();
-        dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button->{
-            try { double value=Double.parseDouble(amount.getText().toString()); int gap=Integer.parseInt(days.getText().toString()); if(!Double.isFinite(value)||value<0||gap<0) throw new NumberFormatException();
-                thresholds[index]=value; gaps[index]=gap; dialog.dismiss(); refresh();
-            } catch(NumberFormatException e) { days.setError("Enter a non-negative amount and whole number of days"); }
-        })); dialog.show();
+    private void pickDate() { hideKeyboard(); new DatePickerDialog(this,(v,y,m,d)-> { asOn=LocalDate.of(y,m+1,d); refresh(); },asOn.getYear(),asOn.getMonthValue()-1,asOn.getDayOfMonth()).show(); }
+    private LinearLayout sheet(BottomSheetDialog dialog,String title) {
+        LinearLayout content=vertical(); content.setBackgroundColor(Color.WHITE); LinearLayout heading=horizontal(); heading.setPadding(dp(18),dp(8),dp(6),dp(8)); heading.addView(ui.text(title,20,true),new LinearLayout.LayoutParams(0,-2,1)); heading.addView(ui.icon(R.drawable.ic_x,"Close",dialog::dismiss)); content.addView(heading); content.addView(ui.line()); return content;
+    }
+    private void present(BottomSheetDialog dialog,LinearLayout content) {
+        if(openSheet!=null) openSheet.dismiss(); openSheet=dialog; dialog.setContentView(content);
+        dialog.setOnShowListener(d->{ FrameLayout frame=dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet); if(frame!=null) { int height=(int)(getResources().getDisplayMetrics().heightPixels*.88); frame.getLayoutParams().height=height; BottomSheetBehavior<FrameLayout> behavior=BottomSheetBehavior.from(frame); behavior.setMaxHeight(height); behavior.setSkipCollapsed(true); behavior.setState(BottomSheetBehavior.STATE_EXPANDED); } });
+        dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN); dialog.show();
+    }
+    private void showFilters() {
+        hideKeyboard(); final int current=report; if(current==0) return;
+        BottomSheetDialog dialog=new BottomSheetDialog(this); LinearLayout content=sheet(dialog,"Filters"); ScrollView scroll=new ScrollView(this); LinearLayout fields=vertical(); fields.setPadding(dp(18),dp(20),dp(18),dp(20)); scroll.addView(fields); content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        String[] choices=new String[9]; choices[0]="All slabs"; System.arraycopy(Reports.SLABS,0,choices,1,8); Spinner slab=spinner(choices); slab.setContentDescription("Slab filter"); slab.setSelection(slabs[current]+1);
+        Spinner ranking=spinner(new String[]{"Highest balance","Bill value","Number of bills"}); ranking.setContentDescription("Sort customers by"); ranking.setSelection(customerSort);
+        EditText amount=new EditText(this), days=new EditText(this); amount.setInputType(8194); days.setInputType(2); amount.setContentDescription("Minimum old balance"); days.setContentDescription("Minimum days");
+        if(current<=2) { fields.addView(ui.label("Ageing slab")); fields.addView(slab); if(current==2) { ui.gap(fields,20); fields.addView(ui.label("Rank customers by")); fields.addView(ranking); } }
+        else { amount.setText(String.valueOf(thresholds[current-3])); days.setText(String.valueOf(gaps[current-3])); fields.addView(ui.label("Minimum old balance")); fields.addView(amount); ui.gap(fields,20); fields.addView(ui.label(current==3?"Old bill age at new bill (days)":"Minimum gap between bills (days)")); fields.addView(days); }
+        LinearLayout actions=horizontal(); actions.setPadding(dp(18),dp(12),dp(18),dp(16));
+        actions.addView(ui.button("Reset",0,false,()->{ slab.setSelection(0); ranking.setSelection(0); amount.setText("500"); days.setText("60"); }),new LinearLayout.LayoutParams(0,-2,1));
+        MaterialButton apply=ui.button("Apply",0,true,()->{
+            if(current>=3) { try { double value=Double.parseDouble(amount.getText().toString()); int gap=Integer.parseInt(days.getText().toString()); if(!Double.isFinite(value)||value<0||gap<0) throw new NumberFormatException(); thresholds[current-3]=value; gaps[current-3]=gap; } catch(NumberFormatException e) { days.setError("Enter a non-negative amount and whole number of days"); return; } }
+            else { slabs[current]=slab.getSelectedItemPosition()-1; if(current==2) customerSort=ranking.getSelectedItemPosition(); }
+            sortColumn=-1; dialog.dismiss(); refresh();
+        }); LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1); ap.setMargins(dp(12),0,0,0); actions.addView(apply,ap); content.addView(ui.line()); content.addView(actions); present(dialog,content);
+    }
+    private void showSort() {
+        if(table==null) return; hideKeyboard(); BottomSheetDialog dialog=new BottomSheetDialog(this); LinearLayout content=sheet(dialog,"Sort report");
+        ScrollView scroll=new ScrollView(this); LinearLayout fields=vertical(); fields.setPadding(dp(18),dp(20),dp(18),dp(20)); scroll.addView(fields); content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        String[] choices=new String[table.headers.length+1]; choices[0]="Default report order"; System.arraycopy(table.headers,0,choices,1,table.headers.length);
+        fields.addView(ui.label("Sort by")); Spinner column=spinner(choices); column.setSelection(sortColumn+1); fields.addView(column); ui.gap(fields,16);
+        RadioGroup order=new RadioGroup(this); RadioButton ascending=new RadioButton(this),descending=new RadioButton(this); ascending.setId(View.generateViewId()); descending.setId(View.generateViewId()); ascending.setText("Ascending"); descending.setText("Descending"); order.addView(ascending); order.addView(descending); order.check(reverse?descending.getId():ascending.getId()); fields.addView(order);
+        MaterialButton apply=ui.button("Apply",0,true,()->{ sortColumn=column.getSelectedItemPosition()-1; reverse=descending.isChecked(); dialog.dismiss(); refresh(); }); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.setMargins(dp(18),dp(12),dp(18),dp(16)); content.addView(apply,p); present(dialog,content);
     }
     private void refresh() {
         if(busy) return; final int token=++generation;
         Reports.Options o=new Reports.Options(); o.asOn=asOn; o.query=queries[report]; o.slab=slabs[report]; o.customerSort=customerSort;
         if(report>=3) { o.threshold=thresholds[report-3]; o.gap=gaps[report-3]; }
         int selected=report, column=sortColumn; boolean descending=reverse; List<Reports.Invoice> input=invoices;
-        exportButton.setEnabled(false); progress.setVisibility(View.VISIBLE);
+        calculating=true; exportButton.setEnabled(false); progress.setVisibility(View.VISIBLE);
         WORK.execute(()-> { try { Reports.Table result=Reports.build(selected,input,o); if(column>=0) result.sort(column,descending);
-            runOnUiThread(()-> { if(isDestroyed()||token!=generation) return; table=result; progress.setVisibility(View.GONE); exportButton.setEnabled(!invoices.isEmpty()); render();
-                String suffix=selected>=3?" | Old balance > "+Reports.money(o.threshold)+" | Gap > "+o.gap+" days":"";
-                status.setText(result.rows.size()+" rows"+suffix); saveSettings();
+            runOnUiThread(()-> { if(isDestroyed()||token!=generation) return; calculating=false; table=result; progress.setVisibility(View.INVISIBLE); exportButton.setEnabled(!invoices.isEmpty()); render(); saveSettings();
             });
-        } catch(Exception e) { runOnUiThread(()-> { if(isDestroyed()||token!=generation) return; progress.setVisibility(View.GONE); error("Report failed",e); }); } });
+        } catch(Exception e) { runOnUiThread(()-> { if(isDestroyed()||token!=generation) return; calculating=false; progress.setVisibility(View.INVISIBLE); error("Report failed",e); }); } });
     }
-    private void render() { tableHost.removeAllViews(); if(invoices.isEmpty()) { TextView empty=text("No report imported",18,true); empty.setGravity(Gravity.CENTER); tableHost.addView(empty,new LinearLayout.LayoutParams(-1,-1)); } else tableHost.addView(tableView(table,true),new LinearLayout.LayoutParams(-1,-1)); }
+    private void render() {
+        boolean loaded=!invoices.isEmpty(); summary.setVisibility(loaded?View.VISIBLE:View.GONE); searchRow.setVisibility(loaded?View.VISIBLE:View.GONE); filterBar.setVisibility(loaded?View.VISIBLE:View.GONE);
+        int amountColumn=new int[]{2,7,6,5,2}[report]; totalLabel.setText(TOTAL_LABELS[report]); totalAmount.setText(table.total.cells[amountColumn]); totalMeta.setText(invoices.size()+" imported invoice records"); dateButton.setText("As of "+asOn.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy")));
+        String active=report>=3?"Old balance > "+Reports.money(thresholds[report-3])+"  ·  Gap > "+gaps[report-3]+" days":slabs[report]>=0?Reports.SLABS[slabs[report]]:"";
+        if(report==2 && customerSort!=0) active+=(active.isEmpty()?"":"  ·  ")+"Ranked by "+(customerSort==1?"bill value":"bill count");
+        activeFilters.setText(active); activeFilters.setVisibility(loaded&&!active.isEmpty()?View.VISIBLE:View.GONE); status.setText(table.rows.size()+" results");
+        if(loaded && !table.rows.isEmpty()) resultList.setAdapter(new ReportListAdapter(ui,table,report));
+        else resultList.setAdapter(new BaseAdapter() {
+            public int getCount(){return 1;} public Object getItem(int p){return null;} public long getItemId(int p){return p;} public boolean isEnabled(int p){return false;}
+            public View getView(int p,View old,ViewGroup parent) {
+                LinearLayout empty=vertical(); empty.setPadding(dp(24),dp(40),dp(24),dp(40)); empty.setGravity(Gravity.CENTER);
+                empty.addView(ui.image(loaded?R.drawable.ic_search:R.drawable.ic_file_spreadsheet,MobileUi.TEAL),new LinearLayout.LayoutParams(dp(40),dp(40))); ui.gap(empty,18);
+                TextView title=ui.text(loaded?"No matching results":"No report imported",20,true); title.setGravity(Gravity.CENTER); empty.addView(title); ui.gap(empty,12);
+                if(loaded) empty.addView(ui.button("Reset filters",0,false,()->{ queries[report]=""; slabs[report]=-1; if(report>=3){thresholds[report-3]=500;gaps[report-3]=60;} configureReport(); refresh(); }));
+                else { TextView hint=ui.label("Outstanding report · XLS or PDF"); hint.setGravity(Gravity.CENTER); empty.addView(hint); }
+                return empty;
+            }
+        });
+    }
+    private void showRow(Reports.Row row,Reports.Table owner) {
+        BottomSheetDialog dialog=new BottomSheetDialog(this); LinearLayout content=sheet(dialog,row==owner.total?"Report totals":"Report details"); ListView details=new ListView(this); details.setDivider(new android.graphics.drawable.ColorDrawable(MobileUi.LINE)); details.setDividerHeight(dp(1));
+        LinearLayout fields=vertical(); fields.setPadding(dp(18),dp(20),dp(18),dp(8)); addFields(fields,owner.headers,row.cells);
+        if(row.details!=null) { ui.gap(fields,12); fields.addView(ui.text("Invoices",18,true)); ui.gap(fields,12); }
+        details.addHeaderView(fields,null,false); Reports.Table invoicesTable=row.details==null?null:Reports.details(row.details,owner.partyDetails); List<Reports.Row> entries=invoicesTable==null?Collections.emptyList():invoicesTable.all();
+        details.setAdapter(new BaseAdapter() {
+            public int getCount(){return entries.size();} public Object getItem(int p){return entries.get(p);} public long getItemId(int p){return p;} public boolean isEnabled(int p){return false;}
+            public View getView(int p,View old,ViewGroup parent){ LinearLayout item=vertical(); item.setPadding(dp(18),dp(16),dp(18),dp(4)); if(entries.get(p)==invoicesTable.total) item.setBackgroundColor(MobileUi.PALE); addFields(item,invoicesTable.headers,entries.get(p).cells); return item; }
+        });
+        content.addView(details,new LinearLayout.LayoutParams(-1,0,1)); present(dialog,content);
+    }
+    private void addFields(LinearLayout target,String[] labels,String[] values) {
+        for(int i=0;i<labels.length;i++) if(!labels[i].equals("No")&&!labels[i].equals("Invoices")&&!values[i].isEmpty()) { target.addView(ui.label(labels[i])); ui.gap(target,5); TextView value=ui.text(values[i],16,true); value.setTextIsSelectable(true); target.addView(value); ui.gap(target,16); }
+    }
+    private void showTable() {
+        if(table==null || calculating) return; hideKeyboard(); BottomSheetDialog dialog=new BottomSheetDialog(this); LinearLayout content=sheet(dialog,"Table view"); content.addView(tableView(table,true),new LinearLayout.LayoutParams(-1,0,1)); dialog.setOnDismissListener(d->{ if(!isDestroyed()) render(); }); present(dialog,content);
+    }
     private View tableView(Reports.Table data,boolean sortable) {
         HorizontalScrollView scroll=new HorizontalScrollView(this); LinearLayout content=vertical();
         int[] widths=new int[data.headers.length]; int total=0;
-        for(int i=0;i<widths.length;i++) { String h=data.headers[i]; widths[i]=dp(i==0?48:h.equals("Customer")||h.equals("Party name")?220:h.equals("Slab")?170:140); total+=widths[i]; }
+        for(int i=0;i<widths.length;i++) { String h=data.headers[i]; widths[i]=dp(i==0?40:h.equals("Customer")||h.equals("Party name")?168:h.equals("Slab")?145:120); total+=widths[i]; }
         int available=getResources().getDisplayMetrics().widthPixels-dp(24);
         if(total<available) { widths[1]+=available-total; total=available; }
         LinearLayout header=horizontal(); header.setBackgroundColor(0xffe2eeeb);
         for(int c=0;c<widths.length;c++) { final int col=c; TextView cell=text(data.headers[c]+(sortable && sortColumn==c?(reverse?" \u2193":" \u2191"):""),13,true); cell.setPadding(dp(8),dp(8),dp(8),dp(8)); cell.setGravity(Gravity.CENTER_VERTICAL); header.addView(cell,new LinearLayout.LayoutParams(widths[c],dp(60)));
-            if(sortable) { cell.setTooltipText("Sort by "+data.headers[c]); cell.setOnClickListener(v->{ reverse=sortColumn==col&&!reverse; sortColumn=col; table.sort(col,reverse); render(); }); }
+            if(sortable) { cell.setTooltipText("Sort by "+data.headers[c]); cell.setOnClickListener(v->{ reverse=sortColumn==col&&!reverse; sortColumn=col; table.sort(col,reverse); if(openSheet!=null) openSheet.dismiss(); showTable(); }); }
         }
         content.addView(header);
         List<Reports.Row> display=data.all(); ListView list=new ListView(this); list.setDividerHeight(dp(1)); list.setAdapter(new BaseAdapter() {
@@ -152,16 +225,16 @@ public class MainActivity extends Activity {
                 row.setBackgroundColor(entry==data.total?0xffdceee8:position%2==0?Color.WHITE:0xfff5f7f6); return row;
             }
         });
-        list.setOnItemClickListener((parent,view,position,id)-> { Reports.Row r=display.get(position); if(r.details!=null) showDetails(Reports.details(r.details,data.partyDetails)); });
+        list.setOnItemClickListener((parent,view,position,id)->showRow(display.get(position),data));
         content.addView(list,new LinearLayout.LayoutParams(-1,0,1)); scroll.addView(content,new HorizontalScrollView.LayoutParams(total,-1)); return scroll;
     }
     private void showDetails(Reports.Table details) {
         LinearLayout panel=vertical(); panel.addView(tableView(details,false),new LinearLayout.LayoutParams(-1,dp(360)));
         new AlertDialog.Builder(this).setTitle(details.title).setView(panel).setPositiveButton("Close",null).show();
     }
-    private void chooseImport() { if(busy) return; Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent,IMPORT); }
+    private void chooseImport() { if(busy) return; hideKeyboard(); Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent,IMPORT); }
     private void chooseExport() {
-        if(table==null||busy) return; pendingExport=table; exportDate=asOn;
+        if(table==null||busy||calculating) return; hideKeyboard(); pendingExport=table; exportDate=asOn;
         Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/pdf").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,table.title.replace(' ','_')+".pdf"); startActivityForResult(intent,EXPORT);
     }
     @Override protected void onActivityResult(int request,int result,Intent data) {
@@ -202,7 +275,7 @@ public class MainActivity extends Activity {
         generation++; SessionStore.clear(this); invoices=new ArrayList<>(); filename="No report imported"; updateSource(); refresh();
     }).show(); }
     private void updateSource() { source.setText(filename+(invoices.isEmpty()?"":" | "+invoices.size()+" invoice records")); }
-    private void setBusy(boolean value,String message) { busy=value; importButton.setEnabled(!value); exportButton.setEnabled(!value&&!invoices.isEmpty()); reports.setEnabled(!value); dateButton.setEnabled(!value); search.setEnabled(!value); settingsButton.setEnabled(!value); progress.setVisibility(value?View.VISIBLE:View.GONE); status.setText(message); }
+    private void setBusy(boolean value,String message) { busy=value; importButton.setEnabled(!value); exportButton.setEnabled(!value&&!invoices.isEmpty()); reports.setEnabled(!value); dateButton.setEnabled(!value); search.setEnabled(!value); filtersButton.setEnabled(!value); progress.setVisibility(value?View.VISIBLE:View.INVISIBLE); status.setText(message); }
     private void error(String title,Exception error) { new AlertDialog.Builder(this).setTitle(title).setMessage(error.getMessage()==null?error.toString():error.getMessage()).setPositiveButton("OK",null).show(); }
     private void saveSettings() {
         SharedPreferences.Editor e=prefs.edit().putString("asOn",asOn.toString()).putInt("report",report).putInt("customerSort",customerSort);
@@ -210,6 +283,5 @@ public class MainActivity extends Activity {
         for(int i=0;i<2;i++) e.putString("threshold"+i,String.valueOf(thresholds[i])).putInt("gap"+i,gaps[i]); e.apply();
     }
     @Override protected void onStop() { super.onStop(); saveSettings(); }
-    @Override protected void onDestroy() { generation++; handler.removeCallbacksAndMessages(null); super.onDestroy(); }
+    @Override protected void onDestroy() { generation++; handler.removeCallbacksAndMessages(null); if(openSheet!=null) openSheet.dismiss(); super.onDestroy(); }
 }
-

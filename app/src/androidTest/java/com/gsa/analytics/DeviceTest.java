@@ -17,6 +17,9 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.*;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.*;
+import static androidx.test.espresso.matcher.ViewMatchers.*;
 
 @RunWith(AndroidJUnit4.class)
 public class DeviceTest {
@@ -39,6 +42,24 @@ public class DeviceTest {
             scenario.recreate(); awaitRows(scenario);
             scenario.onActivity(a->assertEquals(4,((Spinner)find(a.getWindow().getDecorView(),"Report")).getSelectedItemPosition()));
             screenshot("restored-report.png");
+            onView(withText("Filters")).perform(click()); Thread.sleep(400); screenshot("threshold-filters.png");
+            onView(withText("Apply")).perform(click()); awaitRows(scenario);
+            scenario.onActivity(a->((Spinner)find(a.getWindow().getDecorView(),"Report")).setSelection(2)); awaitRows(scenario);
+            onView(withText("Filters")).perform(click()); Thread.sleep(400); screenshot("slab-filters.png");
+            onView(withText("Apply")).perform(click()); awaitRows(scenario);
+            onView(withContentDescription("Search report")).perform(replaceText("Alpha"),closeSoftKeyboard()); Thread.sleep(600);
+            scenario.onActivity(a->assertEquals(3,list(a.getWindow().getDecorView()).getCount())); screenshot("search-results.png");
+            onView(withContentDescription("Clear search")).perform(click()); awaitRows(scenario);
+            onView(withText("Table")).perform(click()); Thread.sleep(500); screenshot("optional-table.png");
+            onView(withContentDescription("Close")).perform(click());
+            scenario.onActivity(a->{ ListView rows=list(a.getWindow().getDecorView()); rows.performItemClick(rows.getChildAt(1),1,0); });
+            Thread.sleep(500); screenshot("invoice-details.png"); onView(withContentDescription("Close")).perform(click());
+            onView(withContentDescription("Sort report")).perform(click()); Thread.sleep(400); screenshot("sort-options.png"); onView(withText("Apply")).perform(click()); awaitRows(scenario);
+            scenario.onActivity(a->a.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)); Thread.sleep(1000); awaitRows(scenario); screenshot("landscape.png");
+            scenario.onActivity(a->a.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)); Thread.sleep(700); awaitRows(scenario);
+            try {
+                shell("wm density 540"); shell("settings put system font_scale 1.3"); Thread.sleep(800); scenario.recreate(); awaitRows(scenario); screenshot("small-phone-large-font.png");
+            } finally { shell("wm density reset"); shell("settings put system font_scale 1.0"); }
         }
     }
     @Test public void importsTextPdfOnAndroid() throws Exception {
@@ -94,5 +115,7 @@ public class DeviceTest {
         Bitmap bitmap=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot(); assertNotNull(bitmap);
         try(OutputStream out=new FileOutputStream(new File(context.getExternalFilesDir(null),name))) { bitmap.compress(Bitmap.CompressFormat.PNG,100,out); } finally { bitmap.recycle(); }
     }
+    private void shell(String command) throws Exception {
+        try(android.os.ParcelFileDescriptor fd=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command); InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) { byte[] buffer=new byte[1024]; while(in.read(buffer)!=-1) {} }
+    }
 }
-
