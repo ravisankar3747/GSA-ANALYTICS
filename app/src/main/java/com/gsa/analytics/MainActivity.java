@@ -50,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progress;
     private SharedPreferences prefs;
     private static final String[] NAMES={"Balance by slab","Bills by slab","Bills count by slab","Old due billing","Old due vs new bills"};
-    private static final String[] TOTAL_LABELS={"Outstanding balance","Outstanding balance","Outstanding balance","Old balance across bill pairs","Party outstanding balance"};
+    private static final String[] TOTAL_LABELS={"Outstanding","Outstanding","Outstanding","Old pair balance","Party balance"};
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved); WindowCompat.setDecorFitsSystemWindows(getWindow(),false); ui=new MobileUi(this); PDFBoxResourceLoader.init(getApplicationContext()); prefs=getSharedPreferences("settings",MODE_PRIVATE);
@@ -82,14 +82,16 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout toolbar=horizontal(); toolbar.setPadding(dp(18),dp(6),dp(6),dp(6));
         LinearLayout brand=vertical(); brand.addView(ui.text("GSA Analytics",20,true)); source=ui.label(filename); source.setSingleLine(); source.setEllipsize(TextUtils.TruncateAt.MIDDLE); ui.gap(brand,4); brand.addView(source);
         toolbar.addView(brand,new LinearLayout.LayoutParams(0,-2,1)); toolbar.addView(ui.icon(R.drawable.ic_ellipsis_vertical,"More options",this::showMore)); root.addView(toolbar);
-        reports=spinner(NAMES); reports.setContentDescription("Report"); reports.setSelection(report); reports.setPadding(dp(12),0,dp(12),0); root.addView(reports,new LinearLayout.LayoutParams(-1,dp(52)));
+        reports=spinner(NAMES); reports.setContentDescription("Report"); reports.setSelection(report); reports.setPadding(dp(12),0,dp(12),0); LinearLayout reportNav=horizontal(); reportNav.addView(reports,new LinearLayout.LayoutParams(0,dp(52),1)); if(getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE) reportNav.addView(ui.icon(R.drawable.ic_ellipsis_vertical,"More options",this::showMore)); root.addView(reportNav);
         root.addView(ui.line()); progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal); progress.setIndeterminate(true); root.addView(progress,new LinearLayout.LayoutParams(-1,dp(2)));
         resultList=new ListView(this); resultList.setContentDescription("Report results"); resultList.setDivider(new android.graphics.drawable.ColorDrawable(MobileUi.LINE)); resultList.setDividerHeight(dp(1)); resultList.setClipToPadding(false);
         LinearLayout header=vertical();
-        summary=vertical(); summary.setPadding(dp(18),dp(18),dp(18),dp(16)); summary.setBackgroundColor(MobileUi.PALE);
-        LinearLayout amountRow=horizontal(); LinearLayout totals=vertical(); totalLabel=ui.label(""); totals.addView(totalLabel); ui.gap(totals,8); totalAmount=ui.text("",30,true); ui.fitMoney(totalAmount,30); totals.addView(totalAmount,new LinearLayout.LayoutParams(-1,dp(40))); ui.gap(totals,6); totalMeta=ui.label(""); totals.addView(totalMeta);
-        amountRow.addView(totals,new LinearLayout.LayoutParams(0,-2,1)); amountRow.addView(ui.icon(R.drawable.ic_chevron_right,"Report totals",()->{ if(table!=null) showRow(table.total,table); })); summary.addView(amountRow); ui.gap(summary,14);
-        dateButton=ui.button("",R.drawable.ic_calendar_days,false,this::pickDate); dateButton.setContentDescription("Change ageing date"); summary.addView(dateButton,new LinearLayout.LayoutParams(-2,-2)); header.addView(summary);
+        summary=vertical(); summary.setPadding(dp(18),dp(12),dp(18),dp(12)); summary.setBackgroundColor(MobileUi.PALE);
+        LinearLayout amountRow=horizontal(); LinearLayout totals=vertical(); LinearLayout labelRow=horizontal(); totalLabel=ui.label(""); labelRow.addView(totalLabel,new LinearLayout.LayoutParams(0,-2,1)); labelRow.addView(ui.image(R.drawable.ic_chevron_right,MobileUi.MUTED),new LinearLayout.LayoutParams(dp(16),dp(16))); totals.addView(labelRow);
+        ui.gap(totals,5); totalAmount=ui.text("",26,true); ui.fitMoney(totalAmount,26); totals.addView(totalAmount,new LinearLayout.LayoutParams(-1,dp(34))); totalMeta=ui.label(""); totalMeta.setVisibility(View.GONE);
+        totals.setContentDescription("Report totals"); totals.setMinimumHeight(dp(48)); totals.setOnClickListener(v->{ if(table!=null) showRow(table.total,table); }); amountRow.addView(totals,new LinearLayout.LayoutParams(0,-2,1));
+        dateButton=ui.button("",R.drawable.ic_calendar_days,false,this::pickDate); dateButton.setTextSize(12); dateButton.setPadding(dp(8),dp(8),dp(8),dp(8)); dateButton.setContentDescription("Change ageing date"); LinearLayout.LayoutParams dateParams=new LinearLayout.LayoutParams(dp(ui.narrow()?132:142),-2); dateParams.setMarginStart(dp(16)); amountRow.addView(dateButton,dateParams); summary.addView(amountRow); header.addView(summary);
+        if(getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE) toolbar.setVisibility(View.GONE);
         searchRow=horizontal(); searchRow.setPadding(dp(16),dp(14),dp(16),dp(6));
         LinearLayout searchBox=horizontal(); searchBox.setBackground(ui.background(MobileUi.PALE,8)); ImageView glass=ui.image(R.drawable.ic_search,MobileUi.MUTED); LinearLayout.LayoutParams gp=new LinearLayout.LayoutParams(dp(20),dp(20)); gp.setMargins(dp(12),0,dp(8),0); searchBox.addView(glass,gp);
         search=new EditText(this); search.setSingleLine(true); search.setHint("Search report"); search.setContentDescription("Search report"); search.setTextSize(14); search.setBackgroundColor(Color.TRANSPARENT); search.setPadding(0,dp(10),0,dp(10)); search.setMinHeight(dp(48)); search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
@@ -113,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
         root.requestFocus(); android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE); if(keyboard!=null) keyboard.hideSoftInputFromWindow(search.getWindowToken(),0);
     }
     private void showMore() {
-        PopupMenu menu=new PopupMenu(this,root.getChildAt(0)); menu.getMenu().add("Report file"); menu.getMenu().add("Clear imported report");
+        PopupMenu menu=new PopupMenu(this,reports); menu.getMenu().add("Report file"); menu.getMenu().add("Clear imported report");
         menu.setOnMenuItemClickListener(item->{ if(item.getTitle().equals("Report file")) new MaterialAlertDialogBuilder(this).setTitle("Report file").setMessage(filename+"\n"+invoices.size()+" invoice records").setPositiveButton("Close",null).show(); else confirmClear(); return true; }); menu.show();
     }
     private interface Selection { void accept(int value); }
@@ -171,7 +173,7 @@ public class MainActivity extends AppCompatActivity {
     }
     private void render() {
         boolean loaded=!invoices.isEmpty(); summary.setVisibility(loaded?View.VISIBLE:View.GONE); searchRow.setVisibility(loaded?View.VISIBLE:View.GONE); filterBar.setVisibility(loaded?View.VISIBLE:View.GONE);
-        int amountColumn=new int[]{2,7,6,5,2}[report]; totalLabel.setText(TOTAL_LABELS[report]); totalAmount.setText(table.total.cells[amountColumn]); totalMeta.setText(invoices.size()+" imported invoice records"); dateButton.setText("As of "+asOn.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy")));
+        int amountColumn=new int[]{2,7,6,5,2}[report]; totalLabel.setText(TOTAL_LABELS[report]); totalAmount.setText(table.total.cells[amountColumn]); dateButton.setText("As of\n"+asOn.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy")));
         String active=report>=3?"Old balance > "+Reports.money(thresholds[report-3])+"  ·  Gap > "+gaps[report-3]+" days":slabs[report]>=0?Reports.SLABS[slabs[report]]:"";
         if(report==2 && customerSort!=0) active+=(active.isEmpty()?"":"  ·  ")+"Ranked by "+(customerSort==1?"bill value":"bill count");
         activeFilters.setText(active); activeFilters.setVisibility(loaded&&!active.isEmpty()?View.VISIBLE:View.GONE); status.setText(table.rows.size()+" results");
@@ -200,7 +202,9 @@ public class MainActivity extends AppCompatActivity {
         content.addView(details,new LinearLayout.LayoutParams(-1,0,1)); present(dialog,content);
     }
     private void addFields(LinearLayout target,String[] labels,String[] values) {
-        for(int i=0;i<labels.length;i++) if(!labels[i].equals("No")&&!labels[i].equals("Invoices")&&!values[i].isEmpty()) { target.addView(ui.label(labels[i])); ui.gap(target,5); TextView value=ui.text(values[i],16,true); value.setTextIsSelectable(true); target.addView(value); ui.gap(target,16); }
+        for(int i=0;i<labels.length;i++) if(!labels[i].equals("No.")&&!labels[i].equals("No")&&!labels[i].equals("Invoices")&&!values[i].isEmpty()) {
+            LinearLayout field=horizontal(); field.setMinimumHeight(dp(44)); field.setPadding(0,dp(8),0,dp(8)); TextView label=ui.label(labels[i]); label.setPadding(0,0,dp(12),0); field.addView(label,new LinearLayout.LayoutParams(0,-2,1)); TextView value=ui.text(values[i],14,true); value.setGravity(Gravity.END); value.setTextIsSelectable(true); field.addView(value,new LinearLayout.LayoutParams(0,-2,1.3f)); target.addView(field); target.addView(ui.line());
+        }
     }
     private void showTable() {
         if(table==null || calculating) return; hideKeyboard(); BottomSheetDialog dialog=new BottomSheetDialog(this); LinearLayout content=sheet(dialog,"Table view"); content.addView(tableView(table,true),new LinearLayout.LayoutParams(-1,0,1)); dialog.setOnDismissListener(d->{ if(!isDestroyed()) render(); }); present(dialog,content);
