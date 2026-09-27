@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); s.setAdapter(adapter); s.setMinimumHeight(dp(48)); return s;
     }
     private void buildUi() {
-        root=vertical(); root.setBackgroundColor(Color.WHITE); root.setPadding(dp(12),0,dp(12),0);
+        root=vertical(); root.setFocusableInTouchMode(true); root.setBackgroundColor(Color.WHITE); root.setPadding(dp(12),0,dp(12),0);
         root.setOnApplyWindowInsetsListener((v,insets)-> { v.setPadding(dp(12)+insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),dp(12)+insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom()); return insets; });
         setContentView(root);
         LinearLayout title=horizontal(); title.addView(text("GSA-ANALYTICS",20,true),new LinearLayout.LayoutParams(0,dp(56),1));
@@ -102,6 +102,9 @@ public class MainActivity extends Activity {
         restoring=true; search.setText(queries[report]); slabPicker.setSelection(slabs[report]+1); sortPicker.setSelection(customerSort);
         filterBar.setVisibility(report==1 || report==2?View.VISIBLE:View.GONE); sortPicker.setVisibility(report==2?View.VISIBLE:View.GONE);
         settingsButton.setVisibility(report>=3?View.VISIBLE:View.GONE); restoring=false;
+        root.requestFocus();
+        android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(keyboard!=null) keyboard.hideSoftInputFromWindow(search.getWindowToken(),0);
     }
     private void pickDate() { new DatePickerDialog(this,(v,y,m,d)-> { asOn=LocalDate.of(y,m+1,d); dateButton.setText(asOn.format(Reports.DATE)); refresh(); },asOn.getYear(),asOn.getMonthValue()-1,asOn.getDayOfMonth()).show(); }
     private void thresholdDialog() {
@@ -209,3 +212,4 @@ public class MainActivity extends Activity {
     @Override protected void onStop() { super.onStop(); saveSettings(); }
     @Override protected void onDestroy() { generation++; handler.removeCallbacksAndMessages(null); super.onDestroy(); }
 }
+
