@@ -79,7 +79,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            gradle connectedDebugAndroidTest --stacktrace
+            gradle connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true --stacktrace
             adb pull /sdcard/Android/data/com.gsa.analytics/files/ device-test-output
       - uses: actions/upload-artifact@v4
         if: always()
