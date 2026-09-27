@@ -132,8 +132,11 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout content=vertical(); content.setBackgroundColor(Color.WHITE); LinearLayout heading=horizontal(); heading.setPadding(dp(18),dp(8),dp(6),dp(8)); heading.addView(ui.text(title,20,true),new LinearLayout.LayoutParams(0,-2,1)); heading.addView(ui.icon(R.drawable.ic_x,"Close",dialog::dismiss)); content.addView(heading); content.addView(ui.line()); return content;
     }
     private void present(BottomSheetDialog dialog,LinearLayout content) {
+        present(dialog,content,true);
+    }
+    private void present(BottomSheetDialog dialog,LinearLayout content,boolean tall) {
         if(openSheet!=null) openSheet.dismiss(); openSheet=dialog; dialog.setContentView(content);
-        dialog.setOnShowListener(d->{ FrameLayout frame=dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet); if(frame!=null) { int height=(int)(getResources().getDisplayMetrics().heightPixels*.88); frame.getLayoutParams().height=height; BottomSheetBehavior<FrameLayout> behavior=BottomSheetBehavior.from(frame); behavior.setMaxHeight(height); behavior.setSkipCollapsed(true); behavior.setState(BottomSheetBehavior.STATE_EXPANDED); } });
+        dialog.setOnShowListener(d->{ FrameLayout frame=dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet); if(frame!=null) { int height=(int)(getResources().getDisplayMetrics().heightPixels*.88); if(!tall) height=Math.min(height,dp(420*getResources().getConfiguration().fontScale)); frame.getLayoutParams().height=height; BottomSheetBehavior<FrameLayout> behavior=BottomSheetBehavior.from(frame); behavior.setMaxHeight(height); behavior.setSkipCollapsed(true); behavior.setState(BottomSheetBehavior.STATE_EXPANDED); } });
         dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN); dialog.show();
     }
     private void showFilters() {
@@ -150,7 +153,7 @@ public class MainActivity extends AppCompatActivity {
             if(current>=3) { try { double value=Double.parseDouble(amount.getText().toString()); int gap=Integer.parseInt(days.getText().toString()); if(!Double.isFinite(value)||value<0||gap<0) throw new NumberFormatException(); thresholds[current-3]=value; gaps[current-3]=gap; } catch(NumberFormatException e) { days.setError("Enter a non-negative amount and whole number of days"); return; } }
             else { slabs[current]=slab.getSelectedItemPosition()-1; if(current==2) customerSort=ranking.getSelectedItemPosition(); }
             sortColumn=-1; dialog.dismiss(); refresh();
-        }); LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1); ap.setMargins(dp(12),0,0,0); actions.addView(apply,ap); content.addView(ui.line()); content.addView(actions); present(dialog,content);
+        }); LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1); ap.setMargins(dp(12),0,0,0); actions.addView(apply,ap); content.addView(ui.line()); content.addView(actions); present(dialog,content,false);
     }
     private void showSort() {
         if(table==null) return; hideKeyboard(); BottomSheetDialog dialog=new BottomSheetDialog(this); LinearLayout content=sheet(dialog,"Sort report");
@@ -158,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
         String[] choices=new String[table.headers.length+1]; choices[0]="Default report order"; System.arraycopy(table.headers,0,choices,1,table.headers.length);
         fields.addView(ui.label("Sort by")); Spinner column=spinner(choices); column.setSelection(sortColumn+1); fields.addView(column); ui.gap(fields,16);
         RadioGroup order=new RadioGroup(this); RadioButton ascending=new RadioButton(this),descending=new RadioButton(this); ascending.setId(View.generateViewId()); descending.setId(View.generateViewId()); ascending.setText("Ascending"); descending.setText("Descending"); order.addView(ascending); order.addView(descending); order.check(reverse?descending.getId():ascending.getId()); fields.addView(order);
-        MaterialButton apply=ui.button("Apply",0,true,()->{ sortColumn=column.getSelectedItemPosition()-1; reverse=descending.isChecked(); dialog.dismiss(); refresh(); }); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.setMargins(dp(18),dp(12),dp(18),dp(16)); content.addView(apply,p); present(dialog,content);
+        MaterialButton apply=ui.button("Apply",0,true,()->{ sortColumn=column.getSelectedItemPosition()-1; reverse=descending.isChecked(); dialog.dismiss(); refresh(); }); LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2); p.setMargins(dp(18),dp(12),dp(18),dp(16)); content.addView(apply,p); present(dialog,content,false);
     }
     private void refresh() {
         if(busy) return; final int token=++generation;
